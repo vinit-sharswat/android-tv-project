@@ -7,8 +7,15 @@ Created on Wed Oct 13 16:18:49 2021
 """
 
 from flask import Flask, jsonify, request
-
 import time
+import mysql.connector
+
+mydb = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="",
+    database="testing"
+)
 
 port = 8000  # Dev
 
@@ -22,18 +29,28 @@ def current_milli_time(): return round(time.time() * 1000)
 # This endpoint takes the following input: {"tv_index": "tv_index_value","previous_video_index": "video_index_value"}
 @app.route("/get-video", methods=['POST'])
 def get_video():
-    inputData = request.get_json()
+    try:
+        inputData = request.get_json()
 
-    if(not inputData["previous_video_index"]):
-        print("{}: User connection has been established: Play First video".format(
-            inputData["tv_index"]))
-    else:
-        print("{}: User looking for a new video".format(
-            inputData["tv_index"]))
+        if(not inputData["previous_video_index"]):
+            print("{}: User connection has been established: Play First video".format(
+                inputData["tv_index"]))
+        else:
+            print("{}: User looking for a new video".format(
+                inputData["tv_index"]))
 
-    resp = jsonify({"Success": "tv_video_path"})
-    resp.status_code = 500
-    return resp
+        query = "SELECT * FROM tv_details WHERE tv_index='" + \
+            str(inputData["tv_index"]) + "'"
+        output = query_database(query)
+
+        resp = jsonify({"success": True, "video_path": output[0][2]})
+        resp.status_code = 200
+        return resp
+    except Exception as e:
+        resp = jsonify({"success": False})
+        resp.status_code = 500
+        return resp
+        print(e)
 
 
 @app.route('/healthz')
@@ -57,6 +74,12 @@ def requests_error(error):
     resp = jsonify({"Error": "Error Detected: " + request.url})
     resp.status_code = 500
     return resp
+
+
+def query_database(query):
+    mycursor = mydb.cursor()
+    mycursor.execute(query)
+    return(mycursor.fetchall())
 
 
 if __name__ == '__main__':
