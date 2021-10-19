@@ -47,10 +47,10 @@ def get_video():
         resp.status_code = 200
         return resp
     except Exception as e:
+        print(e)
         resp = jsonify({"success": False})
         resp.status_code = 500
         return resp
-        print(e)
 
 
 @app.route('/healthz')
