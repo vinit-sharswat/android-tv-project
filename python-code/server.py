@@ -7,28 +7,31 @@ Created on Wed Oct 13 16:18:49 2021
 """
 
 from flask import Flask, jsonify, request
-import time
-import mysql.connector
+from flask_cors import CORS
+import os
 
-mydb = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="",
-    database="testing"
-)
+from cloudant.client import Cloudant
+from cloudant.query import Query
+
+serviceUsername = os.environ['serviceUsername']
+servicePassword = os.environ['servicePassword']
+serviceURL = os.environ['serviceURL']
+# serviceUsername = "apikey-v2-2zqrhw30ux33awo5j9anua3hr69rirt1xlflkyvh1euf"
+# servicePassword = "3185eb6c4f9b49b030999455621d62ce"
+# serviceURL = "https://apikey-v2-2zqrhw30ux33awo5j9anua3hr69rirt1xlflkyvh1euf:3185eb6c4f9b49b030999455621d62ce@50a7b96e-13aa-41ca-8020-992577e71d7a-bluemix.cloudantnosqldb.appdomain.cloud"
+
+client = Cloudant(serviceUsername, servicePassword, url=serviceURL)
 
 port = 8000  # Dev
 
-app = Flask(__name__, static_url_path='/public')
-
-
-# This function calculates the currentTime and returns back in milliseconds
-def current_milli_time(): return round(time.time() * 1000)
+app = Flask(__name__)
+CORS(app)
 
 
 # This endpoint takes the following input: {"tv_index": "tv_index_value","previous_video_index": "video_index_value"}
-@app.route("/get-video", methods=['POST'])
-def get_video():
+@app.route("/fetch", methods=['POST'])
+def fetch():
+    print("Video Fetch API is hit")
     try:
         inputData = request.get_json()
 
@@ -39,15 +42,24 @@ def get_video():
             print("{}: User looking for a new video".format(
                 inputData["tv_index"]))
 
-        query = "SELECT * FROM tv_details WHERE tv_index='" + \
-            str(inputData["tv_index"]) + "'"
-        output = query_database(query)
-
-        resp = jsonify({"success": True, "video_path": output[0][2]})
+        output = query_database({
+            "selector": {
+                "tv_index": inputData["tv_index"]
+            },
+            "fields": [
+                "next_video_path",
+                "video_loop_path"
+            ]
+        })
+        resp = jsonify({
+            "success": True,
+            "next_video_path": output[0]["next_video_path"],
+            "video_loop_path": output[0]["video_loop_path"]
+        })
         resp.status_code = 200
         return resp
     except Exception as e:
-        print(e)
+        print("Error: ", e)
         resp = jsonify({"success": False})
         resp.status_code = 500
         return resp
@@ -56,7 +68,7 @@ def get_video():
 @app.route('/healthz')
 def hello_world():
     resp = jsonify({"Status": "UP"})
-    resp.status_code = 404
+    resp.status_code = 200
     return resp
 
 
@@ -77,10 +89,20 @@ def requests_error(error):
 
 
 def query_database(query):
-    mycursor = mydb.cursor()
-    mycursor.execute(query)
-    return(mycursor.fetchall())
+    client.connect()
+    my_database = client['tvs']
+
+    queryOutput = Query(
+        my_database, selector=query["selector"], fields=query["fields"])
+
+    output = queryOutput(limit=1)['docs']
+    client.disconnect()
+    return output
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=port, threaded=True)
+    # Debug/Development
+    app.run(host="0.0.0.0", port=os.environ['PORT'])
+    # Production
+    # http_server = WSGIServer(('', 5000), app)
+    # http_server.serve_forever()
